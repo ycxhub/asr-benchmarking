@@ -1,0 +1,145 @@
+# Pinned streaming STT providers. Exact IDs and parameters are snapshotted into every run.
+# Set enabled: false to skip a provider without deleting its config.
+
+defaults:
+  concurrency: 2
+  frame_ms: 20
+  forced_timeout_s: 5.0
+  native_timeout_s: 8.0
+  silence_tail_s: 2.0
+  warmup: true
+
+providers:
+  mock:
+    class: mock.MockProvider
+    enabled: true
+    family: mock
+    description: Local mock with injected delay. No API key. Used to validate the harness.
+    params:
+      delay_final_ms: 300
+      delay_partial_ms: 80
+
+  murf:
+    class: murf.MurfProvider
+    enabled: true
+    family: murf
+    api_key_env: MURF_API_KEY
+    hosts: [in.api.murf.ai]
+    description: Murf STT beta (India region only). Finals only; no partials.
+    url: wss://in.api.murf.ai/v1/transcription/stream-input
+    sample_rates: [8000, 16000]
+    frame_ms: 20
+    final_only: true
+    lang_map:
+      hi: {language: hi}
+      en-IN: {language: en_IN}
+      en-US: {language: en_IN}   # Murf has no en-US; Indian-English model is used
+
+  sarvam:
+    class: sarvam.SarvamProvider
+    enabled: true
+    family: sarvam
+    api_key_env: SARVAM_API_KEY
+    hosts: [api.sarvam.ai]
+    description: Sarvam Saaras v3 realtime, manual endpointing.
+    url: wss://api.sarvam.ai/speech-to-text-realtime/ws
+    sample_rates: [8000, 16000]
+    params:
+      model: saaras:v3-realtime
+      stream_type: fast
+      encoding: linear16
+      endpointing: manual
+    lang_map:
+      hi: {language_code: hi-IN, mode: codemix}
+      en-IN: {language_code: en-IN, mode: transcribe}
+      en-US: {language_code: en-IN, mode: transcribe}
+
+  cartesia:
+    class: cartesia.CartesiaManualProvider
+    enabled: true
+    family: cartesia
+    api_key_env: CARTESIA_API_KEY
+    hosts: [api.cartesia.ai]
+    description: Cartesia Ink-2 manual WebSocket (forced endpointing via finalize).
+    url: wss://api.cartesia.ai/stt/websocket
+    sample_rates: [8000, 16000]
+    params:
+      model: ink-2
+      encoding: pcm_s16le
+      cartesia_version: "2026-08-14"
+    lang_map:
+      hi: {}
+      en-IN: {}
+      en-US: {}
+
+  cartesia-turns:
+    class: cartesia.CartesiaTurnsProvider
+    enabled: false
+    family: cartesia
+    api_key_env: CARTESIA_API_KEY
+    hosts: [api.cartesia.ai]
+    description: Cartesia Ink-2 auto turn detection. Native mode only (no force-endpoint).
+    url: wss://api.cartesia.ai/stt/turns/websocket
+    sample_rates: [8000, 16000]
+    supports_forced: false
+    params:
+      model: ink-2
+      encoding: pcm_s16le
+      cartesia_version: "2026-08-14"
+    lang_map:
+      hi: {}
+      en-IN: {}
+      en-US: {}
+
+  deepgram-flux:
+    class: deepgram.DeepgramFluxProvider
+    enabled: true
+    family: deepgram
+    api_key_env: DEEPGRAM_API_KEY
+    hosts: [api.deepgram.com]
+    description: Deepgram Flux listen v2 with ForceEndTurn.
+    url: wss://api.deepgram.com/v2/listen
+    sample_rates: [8000, 16000]
+    params:
+      encoding: linear16
+    lang_map:
+      hi: {model: flux-general-multi, language_hint: [hi, en]}
+      en-IN: {model: flux-general-en}
+      en-US: {model: flux-general-en}
+
+  deepgram-nova3:
+    class: deepgram.DeepgramNova3Provider
+    enabled: false
+    family: deepgram
+    api_key_env: DEEPGRAM_API_KEY
+    hosts: [api.deepgram.com]
+    description: Deepgram Nova-3 streaming listen v1 (optional; Flux is the default Deepgram row).
+    url: wss://api.deepgram.com/v1/listen
+    sample_rates: [8000, 16000]
+    params:
+      model: nova-3
+      encoding: linear16
+      punctuate: "true"
+      endpointing: "false"
+    lang_map:
+      hi: {language: multi}
+      en-IN: {language: en-IN}
+      en-US: {language: en-US}
+
+  elevenlabs:
+    class: elevenlabs.ElevenLabsProvider
+    enabled: true
+    family: elevenlabs
+    api_key_env: ELEVENLABS_API_KEY
+    hosts: [api.elevenlabs.io, api.in.residency.elevenlabs.io]
+    description: ElevenLabs Scribe v2 Realtime, manual commit.
+    url: wss://api.elevenlabs.io/v1/speech-to-text/realtime
+    sample_rates: [8000, 16000]
+    wait_for_ready: true
+    params:
+      model_id: scribe_v2_realtime
+      commit_strategy: manual
+    lang_map:
+      hi: {language_code: hi, secondary_languages: [en]}
+      en-IN: {language_code: en}
+      en-US: {language_code: en}

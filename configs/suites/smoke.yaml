@@ -1,0 +1,13 @@
+suite: smoke
+lang: en-US
+description: Tiny synthetic set generated locally. Used to validate the harness with the mock provider (no API keys, no Hugging Face).
+datasets:
+  - name: smoke-en
+    weight: 1.0
+    importer: synthetic
+    license: generated
+    access: local
+    description: Energy-burst tones with known transcripts
+    sample: 8
+    min_s: 0.5
+    max_s: 5.0

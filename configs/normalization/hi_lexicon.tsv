@@ -1,0 +1,63 @@
+# Canonical Devanagari form	accepted surface forms (tab-separated). Applied symmetrically.
+# Loanwords and common Hinglish items. Grow via `asrbench translit mine` + human review.
+अकाउंट	account	एकाउंट	अकाउन्ट
+पेमेंट	payment	पेमेन्ट
+बैंक	bank	बैन्क
+कार्ड	card
+नंबर	number	नम्बर	नं	no
+फोन	phone	फ़ोन
+ईमेल	email	e-mail	इमेल
+ओटीपी	otp	ओ टी पी
+पैन	pan
+आईएफएससी	ifsc	आई एफ एस सी
+यूपीआई	upi	यू पी आई
+एटीएम	atm	ए टी एम
+केवाईसी	kyc	के वाई सी
+लोन	loan	ऋण
+इंश्योरेंस	insurance	इन्श्योरेंस	बीमा
+प्रीमियम	premium
+पॉलिसी	policy	पालिसी
+क्लेम	claim
+ईएमआई	emi	ई एम आई
+क्रेडिट	credit
+डेबिट	debit
+बैलेंस	balance	बैलेन्स
+ट्रांजैक्शन	transaction	ट्रांजेक्शन
+कस्टमर	customer	कस्टमरकेयर
+सपोर्ट	support
+एजेंट	agent
+बुकिंग	booking
+ऑर्डर	order
+डिलीवरी	delivery	डिलिवरी
+प्रोडक्ट	product
+ऑफर	offer
+डिस्काउंट	discount
+एप	app	ऐप	application
+वेबसाइट	website
+पासवर्ड	password
+लॉगिन	login	log in
+हैलो	hello	हेलो
+प्लीज	please
+सॉरी	sorry
+थैंक्यू	thank you	thanks	थैंक्स
+ओके	ok	okay	ओके
+येस	yes
+नहीं	nahi	nahe	nai
+है	hai
+हूं	hun	hoon	hu
+करूंगा	karunga	karunga
+चाहिए	chahiye	chahie
+क्या	kya
+कैसे	kaise
+कहाँ	kahan	kaha
+कब	kab
+क्यों	kyun	kyo
+और	aur	or
+मेरा	mera
+मेरी	meri
+आपका	apka	aapka
+नाम	naam	nam
+पता	pata	address
+रुपये	rupees	rs	INR
+लाख	lakh	lac
+करोड़	crore

@@ -1,0 +1,12 @@
+.env
+.venv
+.venv.nosync/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+asrbench-data/
+.DS_Store

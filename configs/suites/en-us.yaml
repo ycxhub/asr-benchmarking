@@ -1,0 +1,48 @@
+suite: en-us
+lang: en-US
+description: US English; the two Artificial Analysis sets double as a calibration check.
+datasets:
+  - name: pipecat-agent-turns
+    weight: 0.5
+    importer: hf_parquet
+    hf_id: pipecat-ai/stt-benchmark-data
+    split: train
+    license: CC-BY-4.0
+    access: open
+    description: Short spontaneous voice-agent turns (Gemini-generated, human-reviewed references)
+    text_col: [transcription]
+    id_col: [sample_id]
+    sample: 400
+    min_s: 1.0
+    max_s: 30.0
+
+  - name: voxpopuli-aa
+    weight: 0.25
+    importer: hf_jsonl_files
+    hf_id: ArtificialAnalysis/VoxPopuli-Cleaned-AA
+    manifest_file: voxpopuli_cleaned_aa_v1.jsonl
+    audio_path_col: url
+    text_col: transcript
+    id_col: id
+    tag_cols: [gender]
+    license: Apache-2.0
+    access: open
+    description: European Parliament speech with AA-cleaned references (calibration vs Artificial Analysis)
+    sample: 200
+    min_s: 1.0
+    max_s: 60.0
+
+  - name: earnings22-aa
+    weight: 0.25
+    importer: hf_jsonl_files
+    hf_id: ArtificialAnalysis/Earnings22-Cleaned-AA
+    manifest_file: earnings22_cleaned_aa_v1.jsonl
+    audio_path_col: url
+    text_col: transcript
+    id_col: id
+    license: Apache-2.0
+    access: open
+    description: Long-form earnings calls (14-22 min each), streamed as ~30 s turns in one session
+    sample: 2
+    min_s: 60.0
+    max_s: 1800.0

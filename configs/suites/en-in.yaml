@@ -1,0 +1,18 @@
+suite: en-in
+lang: en-IN
+description: Indian-accented English.
+datasets:
+  - name: svarah
+    weight: 1.0
+    importer: hf_parquet
+    hf_id: ai4bharat/Svarah
+    split: test
+    license: CC-BY-4.0
+    access: free Hugging Face login + accept terms (auto-approved)
+    description: Indian-accented English, 117 speakers, 65 districts; includes payments, grocery and government-service use cases
+    text_col: [text]
+    speaker_col: [speaker_id]
+    tag_cols: [gender, age-group, primary_language, native_place_state, occupation_domain]
+    sample: 400
+    min_s: 1.0
+    max_s: 30.0

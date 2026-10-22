@@ -1,0 +1,51 @@
+suite: hi
+lang: hi
+description: Hindi and Hindi-English code-mixed speech. Headline metric is SN-WER.
+datasets:
+  - name: indicvoices-hi
+    weight: 0.4
+    importer: hf_parquet
+    hf_id: ai4bharat/IndicVoices
+    config: hindi
+    split: valid
+    license: CC-BY-4.0
+    access: free Hugging Face login + accept terms (auto-approved)
+    description: Spontaneous extempore and conversational Hindi from 400+ districts
+    text_col: [text, normalized, verbatim]
+    speaker_col: [speaker_id]
+    tag_cols: [gender, scenario, task_name, state, district, age_group]
+    sample: 250
+    min_s: 1.0
+    max_s: 30.0
+
+  - name: mucs-hinglish
+    weight: 0.3
+    importer: hf_parquet
+    hf_id: dianavdavidson/MUCS-Hinglish
+    split: test
+    license: CC-BY-4.0
+    access: open
+    description: MUCS 2021 Hindi-English code-mixed speech (technical tutorials)
+    text_col: [transcript]
+    id_col: [segment_id]
+    speaker_col: [speaker_id]
+    tag_cols: [ratio_english_words_range]
+    cmi_col: ratio_english_words
+    sample: 300
+    min_s: 1.0
+    max_s: 30.0
+
+  - name: lahaja
+    weight: 0.3
+    importer: hf_parquet
+    hf_id: ai4bharat/Lahaja
+    split: test
+    license: MIT
+    access: free Hugging Face login + accept terms (auto-approved)
+    description: Multi-accent Hindi, 132 speakers from 83 districts
+    text_col: [text, transcript, normalized]
+    speaker_col: [speaker_id]
+    tag_cols: [gender, native_place_state, native_language, category]
+    sample: 250
+    min_s: 1.0
+    max_s: 30.0
