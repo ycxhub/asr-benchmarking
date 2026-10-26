@@ -1,0 +1,30 @@
+<p class="ok">Scored.</p>
+<p><a href="/runs/{{ run_id }}/raw">Open the full report</a> · <a href="/runs/{{ run_id }}/clips">Utterance diffs</a></p>
+<table>
+  <tr><th>Provider</th><th>WER</th><th>95% CI</th><th>EOS→final p50</th><th>p90</th></tr>
+  {% for row in scores.providers %}
+  <tr>
+    <td>{{ row.provider }}</td>
+    <td>{{ '%.1f' % (100 * (row.wer.wer or 0)) }}%</td>
+    <td>{{ '%.1f' % (100 * (row.wer_ci95.low or 0)) }}–{{ '%.1f' % (100 * (row.wer_ci95.high or 0)) }}%</td>
+    <td>{{ '%.0f' % (row.latency.eos_to_final_ms.p50 or 0) }} ms</td>
+    <td>{{ '%.0f' % (row.latency.eos_to_final_ms.p90 or 0) }} ms</td>
+  </tr>
+  {% endfor %}
+</table>
+<h2>Duration slices</h2>
+<table>
+  <tr><th>Provider</th><th>Bucket</th><th>Clips</th><th>WER</th></tr>
+  {% for row in scores.slices.duration %}
+  <tr><td>{{ row.provider }}</td><td>{{ row.bucket }}</td><td>{{ row.n }}</td><td>{{ '%.1f' % (100 * (row.wer or 0)) }}%</td></tr>
+  {% endfor %}
+</table>
+{% if scores.paired_vs_murf %}
+<h2>Paired vs Murf</h2>
+<table>
+  <tr><th>Provider</th><th>Δ WER</th><th>p</th></tr>
+  {% for row in scores.paired_vs_murf %}
+  <tr><td>{{ row.other }}</td><td>{{ '%.2f' % (100 * (row.diff or 0)) }} pp</td><td>{{ '%.3f' % (row.p_two_sided or 0) }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}

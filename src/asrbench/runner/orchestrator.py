@@ -1,26 +1,56 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import random
+import subprocess
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Callable
 
 from .. import settings
 from ..datasets.ingest import verify_dataset_audio
 from ..datasets.manifest import load_dataset
+from ..metrics.normalize import NORM_VERSION
 from ..providers import load_provider, snapshot_configs
 from ..providers.base import ProviderError
+from ..store import upsert_run
 from .network import baseline_for_hosts
-from .session import result_to_dict, run_item
+from .session import SessionResult, result_to_dict, run_item
 
 Progress = Callable[[str], None]
 
 
+def _provenance() -> dict:
+    root = settings.PROJECT_ROOT
+    commit = None
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=root, text=True, stderr=subprocess.DEVNULL
+        ).strip() or None
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        commit = None
+    lock = root / "uv.lock"
+    lock_hash = hashlib.sha256(lock.read_bytes()).hexdigest() if lock.exists() else None
+    return {
+        "norm_version": NORM_VERSION,
+        "git_commit": commit,
+        "lockfile_sha256": lock_hash,
+        "package_version": _package_version(),
+    }
+
+
+def _package_version() -> str:
+    pyproject = settings.PROJECT_ROOT / "pyproject.toml"
+    for line in pyproject.read_text(encoding="utf-8").splitlines():
+        if line.startswith("version"):
+            return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return "unknown"
+
+
 def _noop(_: str) -> None:
-    pass
+    return None
 
 
 def new_run_id() -> str:
@@ -96,6 +126,7 @@ async def run_benchmark(
         "concurrency": concurrency,
         "seed": seed,
         "methodology": "MSB v1.0",
+        "provenance": _provenance(),
         "network": net,
         "config": cfg_snap,
     }
@@ -119,20 +150,26 @@ async def run_benchmark(
         nonlocal n_done
         async with sem:
             t0 = time.perf_counter()
-            try:
-                prov = load_provider(provider_name)
-                res = await run_item(
-                    prov, ds, item, mode=mode, condition=condition,
-                    timeout_s=timeout_s, silence_tail_s=silence_tail_s,
-                    frame_ms=int(cfg_snap["providers"][provider_name].get("frame_ms") or defaults.get("frame_ms") or 20),
-                )
-            except ProviderError as exc:
-                from .session import SessionResult
-                res = SessionResult(
-                    item_id=item.id, provider=provider_name, lang=item.lang, mode=mode, condition=condition,
-                    ok=False, hypothesis="", error=str(exc),
-                )
+            res: SessionResult | None = None
+            attempts = 0
+            for attempts in range(1, 3):
+                try:
+                    prov = load_provider(provider_name)
+                    res = await run_item(
+                        prov, ds, item, mode=mode, condition=condition,
+                        timeout_s=timeout_s, silence_tail_s=silence_tail_s,
+                        frame_ms=int(cfg_snap["providers"][provider_name].get("frame_ms") or defaults.get("frame_ms") or 20),
+                    )
+                except ProviderError as exc:
+                    res = SessionResult(
+                        item_id=item.id, provider=provider_name, lang=item.lang, mode=mode, condition=condition,
+                        ok=False, hypothesis="", error=str(exc),
+                    )
+                if res.ok or attempts == 2 or not (res.error or "").startswith("connect:"):
+                    break
+            assert res is not None
             row = result_to_dict(res)
+            row["attempts"] = attempts
             row["wall_s"] = round(time.perf_counter() - t0, 3)
             row["reference"] = item.reference
             row["duration_s"] = item.duration_s
@@ -154,5 +191,6 @@ async def run_benchmark(
     await asyncio.gather(*tasks)
     meta["finished_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     (run_dir / "run.json").write_text(json.dumps(meta, indent=2, default=str))
+    upsert_run(meta, str(run_dir))
     progress(f"run {run_id} written to {run_dir}")
     return meta

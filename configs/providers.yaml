@@ -25,11 +25,11 @@ providers:
     family: murf
     api_key_env: MURF_API_KEY
     hosts: [in.api.murf.ai]
-    description: Murf STT beta (India region only). Finals only; no partials.
+    description: Murf STT beta (India region only). Emits partial/final wrapping TurnInfo.
     url: wss://in.api.murf.ai/v1/transcription/stream-input
     sample_rates: [8000, 16000]
     frame_ms: 20
-    final_only: true
+    final_only: false
     lang_map:
       hi: {language: hi}
       en-IN: {language: en_IN}
@@ -143,3 +143,62 @@ providers:
       hi: {language_code: hi, secondary_languages: [en]}
       en-IN: {language_code: en}
       en-US: {language_code: en}
+
+  # Voice Arena Hindi top 6 (https://voicearena.com/stt-leaderboard/hindi), each provider's
+  # recommended STREAMING model. Leaderboard rows are mostly file-upload models; the
+  # streaming counterpart benchmarked here is:
+  #   Bodhan indic-transcribe   -> none. Bodhan has no hosted streaming API (REST only, 30 s).
+  #                                NON-STREAMING adapter kept in bodhan.py, not registered.
+  #   Sarvam Saaras v3          -> saaras:v3-realtime      (`sarvam` above)
+  #   Google Gemini 3 Pro       -> gemini-3.5-transcribe-live (`gemini-live`)
+  #   Amazon Transcribe         -> Transcribe streaming    (`amazon-transcribe`)
+  #   Microsoft MAI-Transcribe-2 -> MAI-Transcribe-2-Streaming (`mai-streaming`)
+  #   ElevenLabs Scribe v2      -> scribe_v2_realtime      (`elevenlabs` above)
+  # File-upload adapters (bodhan.py, gemini.py, microsoft.py, SarvamRestProvider,
+  # ElevenLabsBatchProvider) are marked NON-STREAMING and are not registered.
+
+  gemini-live:
+    class: gemini_live.GeminiLiveProvider
+    enabled: true
+    family: google
+    api_key_env: GEMINI_API_KEY
+    hosts: [generativelanguage.googleapis.com]
+    description: Google Gemini 3.5 Transcribe Live (Live API). Forced mode uses activityStart/activityEnd.
+    url: wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent
+    sample_rates: [16000]
+    params:
+      model: gemini-3.5-transcribe-live
+      mode: VERBATIM
+    lang_map:
+      hi: {language_codes: [hi-IN]}
+      en-IN: {language_codes: [en-IN]}
+      en-US: {language_codes: [en-US]}
+
+  mai-streaming:
+    class: mai_streaming.MAIStreamingProvider
+    enabled: true
+    family: microsoft
+    api_key_env: AZURE_MAI_API_KEY
+    hosts: []   # region-specific Foundry resource (AZURE_MAI_ENDPOINT)
+    description: Microsoft MAI-Transcribe-2-Streaming (public preview), Realtime WebSocket, manual commit.
+    sample_rates: [16000]
+    lang_map:
+      hi: {language: hi}
+      en-IN: {language: en}
+      en-US: {language: en}
+
+  amazon-transcribe:
+    class: amazon.AmazonTranscribeProvider
+    enabled: true
+    family: amazon
+    api_key_env: AWS_ACCESS_KEY_ID
+    hosts: [transcribestreaming.ap-south-1.amazonaws.com]
+    description: Amazon Transcribe streaming WebSocket. No finalize call, so native endpointing only.
+    sample_rates: [8000, 16000]
+    supports_forced: false
+    params:
+      region: ap-south-1   # AWS_REGION in .env overrides
+    lang_map:
+      hi: {language_code: hi-IN}
+      en-IN: {language_code: en-IN}
+      en-US: {language_code: en-US}

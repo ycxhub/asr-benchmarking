@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block body %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<h2>Run</h2>
+<form class="card" method="post" action="/runs">
+  <label>Dataset
+    <select name="dataset" required>
+      {% for ds in datasets %}<option value="{{ ds.name }}">{{ ds.name }} ({{ ds.lang }}, {{ ds.n_items }})</option>{% endfor %}
+    </select>
+  </label>
+  <fieldset>
+    <legend>Providers</legend>
+    {% for p in providers if p.enabled %}
+    <label><input type="checkbox" name="providers" value="{{ p.name }}" {% if p.name == 'mock' %}checked{% endif %} {% if not p.key_present %}disabled{% endif %}>
+      {{ p.name }}
+      {% if p.key_present %}<span class="ok">ready</span>{% else %}<span class="missing">{{ p.api_key_env }} missing</span>{% endif %}
+    </label>
+    {% endfor %}
+  </fieldset>
+  <label>Mode
+    <select name="mode"><option>forced</option><option>native</option></select>
+  </label>
+  <label>Condition
+    <select name="condition"><option>wideband</option><option>telephony</option></select>
+  </label>
+  <label>Max clips <input name="max_items" placeholder="blank = all"></label>
+  <button type="submit">Start run</button>
+</form>
+
+<h2>Datasets on disk</h2>
+{% if datasets %}
+<table>
+  <tr><th>Name</th><th>Language</th><th>Clips</th><th>Audio</th><th>VAD</th></tr>
+  {% for ds in datasets %}
+  <tr><td>{{ ds.name }}</td><td>{{ ds.lang }}</td><td>{{ ds.n_items }}</td><td>{{ ds.total_audio_s }}s</td><td>{{ ds.vad_method }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">None yet. Ingest the smoke suite, or upload a zip.</p>{% endif %}
+
+<h2>Ingest a suite</h2>
+<form class="card" method="post" action="/ingest">
+  <label>Suite
+    <select name="suite">
+      {% for s in suites %}<option value="{{ s.suite }}">{{ s.suite }} — {{ s.description }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Dataset name <input name="dataset" placeholder="blank = every dataset in the suite"></label>
+  <button type="submit">Ingest</button>
+  <p class="muted">IndicVoices, Lahaja, and Svarah need HF_TOKEN. The smoke suite is local.</p>
+</form>
+
+<h2>Upload a folder as zip</h2>
+<form class="card" method="post" action="/upload" enctype="multipart/form-data">
+  <label>Name <input name="name" required></label>
+  <label>Language
+    <select name="lang"><option>hi</option><option>en-IN</option><option>en-US</option></select>
+  </label>
+  <label>Zip <input type="file" name="file" accept=".zip" required></label>
+  <button type="submit">Upload</button>
+</form>
+
+<h2>Runs</h2>
+{% if runs %}
+<table>
+  <tr><th>Run</th><th>Dataset</th><th>Providers</th><th>Status</th></tr>
+  {% for run in runs %}
+  <tr>
+    <td><a href="/runs/{{ run.run_id }}">{{ run.run_id }}</a></td>
+    <td>{{ run.dataset }} · {{ run.mode }}</td>
+    <td>{{ run.providers | join(', ') }}</td>
+    <td>{{ run.status }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">No runs yet.</p>{% endif %}
+{% endblock %}

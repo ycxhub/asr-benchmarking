@@ -49,7 +49,7 @@ Force-endpoint messages used in `forced` mode:
 
 | Provider (model) | Force-endpoint message | Endpoint-complete signal |
 | --- | --- | --- |
-| Murf STT (beta) | `{"type":"Finalize"}` | `Results` with `speech_final: true` |
+| Murf STT (beta) | `{"type":"Finalize"}` | `type: final` wrapping `TurnInfo` `EndOfTurn` (`trigger: manual`) |
 | Deepgram Nova-3 | `{"type":"Finalize"}` | `Results` with `from_finalize: true` |
 | Deepgram Flux | `{"type":"ForceEndTurn"}` | `TurnInfo` `EndOfTurn` |
 | ElevenLabs Scribe v2 Realtime | `{"message_type":"input_audio_chunk", "commit": true, ...}` | next `committed_transcript` |
@@ -308,7 +308,7 @@ Exact model IDs and parameters are stored with every run. Language mapping:
 
 | Provider | `hi` | `en-IN` | `en-US` | Notes |
 | --- | --- | --- | --- | --- |
-| Murf STT beta | `language=hi` | `language=en_IN` | `language=en_IN` | India region only; final-only results |
+| Murf STT beta | `language=hi` | `language=en_IN` | `language=en_IN` | India region only; partials and finals wrapping TurnInfo |
 | Sarvam `saaras:v3-realtime` | `hi-IN`, `mode=codemix` | `en-IN` | `en-IN` | `endpointing=manual` in forced mode |
 | Cartesia `ink-2` | auto-detect | auto-detect | auto-detect | manual endpoint (forced) or turns endpoint (native) |
 | Deepgram `nova-3` | `language=multi`, `endpointing=100` | `en-IN` | `en-US` | multi recommended for code-switching |

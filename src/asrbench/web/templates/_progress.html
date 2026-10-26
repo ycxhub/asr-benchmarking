@@ -1,0 +1,7 @@
+<p>Status: {{ status }}</p>
+{% if status == 'error' or status == 'scored' %}
+<script>document.getElementById('live').removeAttribute('hx-trigger');</script>
+{% endif %}
+<ul>
+  {% for line in log[-12:] %}<li>{{ line }}</li>{% endfor %}
+</ul>

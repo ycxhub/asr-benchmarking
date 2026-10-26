@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Clips {{ run_id }}{% endblock %}
+{% block body %}
+<h2>Utterances · {{ run_id }}</h2>
+<p class="muted">Sorted by WER. Reference and hypothesis are the normalized forms used for scoring.</p>
+{% for utt in utterances %}
+<article class="card">
+  <strong>{{ utt.provider }}</strong> {{ utt.item_id }}
+  <span class="muted">WER {{ '%.1f' % (100 * (utt.wer or 0)) }}%</span>
+  {% if utt.eos_to_final_ms is not none %}<span class="muted">· {{ '%.0f' % utt.eos_to_final_ms }} ms</span>{% endif %}
+  <p><span class="muted">ref</span> {{ utt.ref_norm }}</p>
+  <p><span class="muted">hyp</span> {{ utt.hyp_norm }}</p>
+  {% if utt.error %}<p class="missing">{{ utt.error }}</p>{% endif %}
+</article>
+{% else %}
+<p>No scored utterances. Run <code>asrbench score {{ run_id }}</code>.</p>
+{% endfor %}
+{% endblock %}

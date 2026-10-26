@@ -9,11 +9,9 @@ from .en import normalize_en
 
 NORM_DIR = Path(__file__).resolve().parents[4] / "configs" / "normalization"
 
-# Nukta letters -> base
-_NUKTA = str.maketrans({
-    "क़": "क", "ख़": "ख", "ग़": "ग", "ज़": "ज", "ड़": "ड", "ढ़": "ढ", "फ़": "फ", "य़": "य",
-    "क़": "क", "ख़": "ख", "ग़": "ग", "ज़": "ज", "ड़": "ड", "ढ़": "ढ", "फ़": "फ", "य़": "य",
-})
+# Combining nukta. NFC decomposes the precomposed nukta letters (they are composition
+# exclusions), so dropping U+093C folds क़/क़ to the base letter.
+_NUKTA = "\u093c"
 _CHANDRA = str.maketrans({"ॉ": "ो", "ॅ": "े", "ऑ": "ओ", "ऍ": "ए", "ँ": "ं"})
 _DEV_DIGIT = str.maketrans("०१२३४५६७८९", "0123456789")
 _PUNCT = re.compile(r"[।॥॰\-–—.,!?;:\"'“”‘’()\[\]{}<>/\\|*~`@#^&+=_]+")
@@ -153,9 +151,10 @@ def _hi_numbers(tokens: list[str]) -> list[str]:
 
 def normalize_hi(text: str, *, script_normalize: bool = False) -> str:
     t = unicodedata.normalize("NFC", text or "")
+    t = t.replace(_NUKTA, "")
     t = _BRACKET.sub(" ", t)
     t = _ZW.sub("", t)
-    t = t.translate(_NUKTA).translate(_CHANDRA).translate(_DEV_DIGIT)
+    t = t.translate(_CHANDRA).translate(_DEV_DIGIT)
     t = _HALF_NASAL.sub("ं", t)
     t = t.replace("₹", " रुपये ").replace("%", " प्रतिशत ")
     t = re.sub(r"\b(?:rs|inr)\b", " रुपये ", t, flags=re.I)

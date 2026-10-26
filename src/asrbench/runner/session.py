@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from dataclasses import asdict, dataclass, field
 
@@ -10,6 +11,23 @@ from ..providers.base import Event, ProviderError, SessionContext, StreamingProv
 from .pacer import Pacer
 
 FALLBACK_S = 2.0  # Artificial Analysis fallback when there is no force-endpoint ack
+
+
+@dataclass(frozen=True)
+class TurnFrames:
+    start_frame: int
+    end_frame: int
+
+
+def plan_turn_frames(turns: list[list[float]], frame_s: float, frame_samples: int = 0) -> list[TurnFrames]:
+    """Inclusive frame indexes whose audio covers each [start, end] interval."""
+    del frame_samples
+    out: list[TurnFrames] = []
+    for start, end in turns:
+        start_frame = int(start / frame_s)
+        end_frame = math.ceil(end / frame_s - 1e-9) - 1
+        out.append(TurnFrames(start_frame, max(start_frame, end_frame)))
+    return out
 
 
 @dataclass
@@ -66,6 +84,7 @@ async def _drain(provider: StreamingProvider, log: list[Event], stop: asyncio.Ev
 
 def _assign_turn_metrics(turns: list[TurnTiming], events: list[Event], mode: str, supports_forced: bool, has_ack: bool, timeout_s: float) -> None:
     for i, turn in enumerate(turns):
+        turn.timeout = False
         t_ss = turn.t_speech_start_sent
         t_ep = turn.t_endpoint
         t_next = turns[i + 1].t_endpoint if i + 1 < len(turns) else None
@@ -82,7 +101,10 @@ def _assign_turn_metrics(turns: list[TurnTiming], events: list[Event], mode: str
         if t_ep is None:
             continue
         after = [e for e in events if e.t >= t_ep - 1e-6]
-        pre_finals = [e for e in events if e.kind == "final" and e.text.strip() and e.t < t_ep]
+        pre_finals = [
+            e for e in events
+            if e.kind == "final" and e.text.strip() and (t_ss is None or e.t >= t_ss - 1e-6) and e.t < t_ep
+        ]
         ack = next((e for e in after if e.kind == "endpoint"), None)
         first_final = next((e for e in after if e.kind == "final"), None)
         first_partial = next((e for e in after if e.kind == "partial" and e.text.strip()), None)
@@ -160,20 +182,22 @@ async def run_item(
     collector = asyncio.create_task(_drain(provider, events, stop))
     pacer = Pacer(stream_bytes, stream_sr, frame_ms=frame_ms)
     error: str | None = None
+    def _refresh(now: float) -> None:
+        _assign_turn_metrics(turns, events, mode, provider.supports_forced, provider.has_endpoint_ack, timeout_s)
+        for tr in turns:
+            if tr.t_endpoint is not None and tr.t_final is None and now - tr.t_endpoint > timeout_s:
+                tr.timeout = True
+
     try:
         turn_i = 0
         begun = False
         last_speech_end = turns[-1].speech_end if turns else 0.0
         max_audio_s = last_speech_end + silence_tail_s
         while pacer.audio_time_s() < max_audio_s + 1e-6:
-            # resolve outstanding timeouts without blocking the pacer
-            now = time.perf_counter()
-            for tr in turns:
-                if tr.t_endpoint is not None and tr.t_final is None and not tr.timeout:
-                    if now - tr.t_endpoint > timeout_s:
-                        tr.timeout = True
-
+            _refresh(time.perf_counter())
             at = pacer.audio_time_s()
+            if turns and all(t.t_final is not None or t.timeout for t in turns) and at >= last_speech_end:
+                break
             if turn_i < len(turns) and not begun and at >= turns[turn_i].speech_start - 1e-4:
                 await provider.begin_turn()
                 begun = True
@@ -193,18 +217,13 @@ async def run_item(
                     begun = False
                     turn_i += 1
 
-            if all(t.t_final is not None or t.timeout for t in turns) and at >= last_speech_end:
-                break
-
         await provider.finish()
-        # wait remaining timeout window for last turn
         deadline = time.perf_counter() + timeout_s
         while time.perf_counter() < deadline:
+            _refresh(time.perf_counter())
             if all(t.t_final is not None or t.timeout for t in turns):
-                # need events to have arrived; assignment happens after drain
-                if any(e.kind in ("final", "endpoint", "turn_end", "closed") for e in events):
-                    await asyncio.sleep(0.05)
-                    break
+                await asyncio.sleep(0.02)
+                break
             await asyncio.sleep(0.02)
     except ProviderError as exc:
         error = str(exc)
@@ -221,7 +240,11 @@ async def run_item(
         except Exception:  # noqa: BLE001
             collector.cancel()
 
+    now = time.perf_counter()
     _assign_turn_metrics(turns, events, mode, provider.supports_forced, provider.has_endpoint_ack, timeout_s)
+    for tr in turns:
+        if tr.t_endpoint is not None and tr.t_final is None and now - tr.t_endpoint > timeout_s:
+            tr.timeout = True
     finals = [e.text.strip() for e in events if e.kind == "final" and e.text.strip()]
     hypothesis = " ".join(finals)
     err_ev = next((e for e in events if e.kind == "error"), None)

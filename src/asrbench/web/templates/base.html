@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}asrbench{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+    :root { color-scheme: light; }
+    body { font: 15px/1.45 -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; color: #1c1917; background: #fafaf9; }
+    header, main { max-width: 980px; margin: 0 auto; padding: 1.25rem 1.5rem; }
+    header { border-bottom: 1px solid #e7e5e4; background: white; }
+    a { color: #9a3412; }
+    h1 { font-size: 1.35rem; margin: 0; }
+    h2 { font-size: 1.05rem; margin-top: 2rem; }
+    form, .card { background: white; border: 1px solid #e7e5e4; border-radius: 8px; padding: 1rem; margin: 0.75rem 0; }
+    label { display: block; margin: 0.45rem 0; }
+    button, .button { background: #1c1917; color: white; border: 0; border-radius: 6px; padding: 0.4rem 0.75rem; }
+    .error { background: #fef2f2; color: #991b1b; padding: 0.6rem 0.8rem; border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { text-align: left; padding: 0.4rem 0.55rem; border-bottom: 1px solid #e7e5e4; vertical-align: top; }
+    .muted { color: #78716c; }
+    .missing { color: #b91c1c; }
+    .ok { color: #166534; }
+  </style>
+</head>
+<body>
+<header><h1><a href="/">asrbench</a></h1><p class="muted">Local streaming STT benchmark. Live providers run only when their API key is in <code>.env</code>.</p></header>
+<main>
+{% block body %}{% endblock %}
+</main>
+</body>
+</html>

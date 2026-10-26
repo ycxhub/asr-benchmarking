@@ -12,6 +12,7 @@ from typing import Callable
 
 import pyarrow.parquet as pq
 from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub.utils import GatedRepoError
 
 from .. import audio as A
 from .. import settings
@@ -27,6 +28,25 @@ SPEAKER_COLS = ["speaker_id", "speaker", "client_id"]
 
 def _noop(_: str) -> None:
     pass
+
+
+def _require_token(spec: dict) -> None:
+    access = str(spec.get("access") or "")
+    if "login" in access.lower() and not settings.env("HF_TOKEN"):
+        raise RuntimeError(
+            f"{spec.get('name')} requires HF_TOKEN. Open the dataset on Hugging Face, accept its terms, "
+            "then add a read token to .env."
+        )
+
+
+def _download(repo_id: str, filename: str, *, revision: str | None = None, token: str | None = None) -> str:
+    try:
+        return hf_hub_download(repo_id, filename, repo_type="dataset", revision=revision, token=token)
+    except GatedRepoError as exc:
+        raise RuntimeError(
+            f"Hugging Face denied {repo_id}. Logged in as the token owner, open "
+            f"https://huggingface.co/datasets/{repo_id} and click Agree, then retry."
+        ) from exc
 
 
 def _as_list(v) -> list:
@@ -76,7 +96,7 @@ def _decode_audio_cell(cell, repo_id: str, revision: str | None, token: str | No
             return np.asarray(cell["array"], dtype="float32"), int(cell["sampling_rate"])
         cell = cell.get("path")
     if isinstance(cell, str) and cell:
-        local = hf_hub_download(repo_id, cell, repo_type="dataset", revision=revision, token=token)
+        local = _download(repo_id, cell, revision=revision, token=token)
         return A.decode_file(local)
     raise ValueError("unsupported audio cell")
 
@@ -100,10 +120,11 @@ def _find_parquet_files(api: HfApi, repo_id: str, config: str | None, split: str
 
 def import_hf_parquet(spec: dict, progress: Progress = _noop) -> dict:
     """Seeded sample of a Hugging Face dataset stored as parquet with an audio column."""
+    _require_token(spec)
     token = settings.env("HF_TOKEN")
     repo_id, split = spec["hf_id"], spec.get("split", "test")
     seed, n_target = int(spec.get("seed", 1234)), spec.get("sample")
-    api = HfApi()
+    api = HfApi(token=token)
     files, revision = _find_parquet_files(api, repo_id, spec.get("config"), split, token)
     rng = random.Random(seed)
     rng.shuffle(files)
@@ -120,7 +141,7 @@ def import_hf_parquet(spec: dict, progress: Progress = _noop) -> dict:
         if n_target and len(writer.items) >= n_target:
             break
         progress(f"downloading {repo_id}:{fname}")
-        local = hf_hub_download(repo_id, fname, repo_type="dataset", revision=revision, token=token)
+        local = _download(repo_id, fname, revision=revision, token=token)
         pf = pq.ParquetFile(local)
         table = pf.read()
         rows = list(range(table.num_rows))
@@ -151,9 +172,10 @@ def import_hf_parquet(spec: dict, progress: Progress = _noop) -> dict:
 
 def import_hf_jsonl_files(spec: dict, progress: Progress = _noop) -> dict:
     """Datasets published as a JSONL manifest plus audio files in the repo (e.g. Artificial Analysis sets)."""
+    _require_token(spec)
     token = settings.env("HF_TOKEN")
     repo_id = spec["hf_id"]
-    local_manifest = hf_hub_download(repo_id, spec["manifest_file"], repo_type="dataset", token=token)
+    local_manifest = _download(repo_id, spec["manifest_file"], token=token)
     rows = [json.loads(line) for line in Path(local_manifest).read_text(encoding="utf-8").splitlines() if line.strip()]
     rng = random.Random(int(spec.get("seed", 1234)))
     rng.shuffle(rows)
@@ -165,7 +187,7 @@ def import_hf_jsonl_files(spec: dict, progress: Progress = _noop) -> dict:
             break
         raw_id = row.get(spec.get("id_col", "id")) or row.get(audio_key)
         try:
-            local = hf_hub_download(repo_id, row[audio_key], repo_type="dataset", token=token)
+            local = _download(repo_id, row[audio_key], token=token)
             samples, sr = A.decode_file(local)
         except Exception as exc:  # noqa: BLE001
             writer.reject(str(raw_id), f"download/decode error: {exc}")
@@ -242,7 +264,44 @@ def import_folder(source: str | Path, name: str, lang: str, license: str = "user
             tmp.cleanup()
 
 
-IMPORTERS = {"hf_parquet": import_hf_parquet, "hf_jsonl_files": import_hf_jsonl_files}
+_PHRASES = [
+    "transfer five lakh to the savings account",
+    "the payment failed please try again",
+    "what is my account balance today",
+    "schedule a call with the insurance desk",
+]
+
+
+def import_synthetic(spec: dict, progress: Progress = _noop) -> dict:
+    """Local tones with known transcripts. No network and no API key."""
+    import numpy as np
+
+    n = int(spec.get("sample") or 4)
+    sr = 16000
+    writer = DatasetWriter(
+        spec["name"],
+        spec["lang"],
+        {"source": {"type": "synthetic"}, "license": spec.get("license", "generated"), "public": False,
+         "description": spec.get("description", ""), "selection": {"sample": n}},
+        min_s=float(spec.get("min_s", 0.5)),
+        max_s=float(spec.get("max_s", 5.0)),
+    )
+    for i in range(n):
+        dur = 1.2
+        audio = np.zeros(int(dur * sr), dtype=np.float32)
+        start, end = int(0.25 * sr), int(0.95 * sr)
+        t = np.arange(end - start) / sr
+        audio[start:end] = 0.45 * np.sin(2 * np.pi * (180 + 30 * (i % 4)) * t)
+        writer.add(f"smoke-{i:03d}", audio, sr, _PHRASES[i % len(_PHRASES)], speaker=f"spk-{i % 2}")
+        progress(f"{spec['name']}: {len(writer.items)} items")
+    return writer.finalize()
+
+
+IMPORTERS = {
+    "hf_parquet": import_hf_parquet,
+    "hf_jsonl_files": import_hf_jsonl_files,
+    "synthetic": import_synthetic,
+}
 
 
 def import_from_spec(spec: dict, progress: Progress = _noop) -> dict:

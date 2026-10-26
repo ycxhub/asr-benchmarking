@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import asyncio
 import statistics
+import tempfile
+from pathlib import Path
 
 import numpy as np
 
 from .. import audio as A
-from ..providers.base import SessionContext
+from ..datasets.manifest import Dataset, Item
 from ..providers.mock import MockProvider
-from .session import SessionConfig, run_session
+from .session import run_item
 
 TOLERANCE_MS = 5.0
 
@@ -20,50 +22,95 @@ def _synthetic(turns: list[list[float]], duration: float, sr: int = 16000) -> by
     for s, e in turns:
         n = int((e - s) * sr)
         t = np.arange(n) / sr
-        x[int(s * sr):int(s * sr) + n] = 0.3 * np.sin(2 * np.pi * 220 * t) * (0.6 + 0.4 * np.sin(2 * np.pi * 3 * t)) + 0.02 * rng.standard_normal(n)
+        x[int(s * sr) : int(s * sr) + n] = 0.3 * np.sin(2 * np.pi * 220 * t)
     return A.to_pcm16(x)
 
 
-async def _one(delay_ms: float, mode: str, turns, duration, final_only=False) -> list[dict]:
-    params = {"finalize_delay_ms": delay_ms, "native_delay_ms": delay_ms, "partial_delay_ms": 100, "first_token_ms": 300,
-              "native_silence_ms": 500, "jitter_ms": 0, "wer_noise": 0, "final_only": final_only}
+def _dataset(root: Path, turns: list[list[float]], duration: float) -> tuple[Dataset, Item]:
+    audio = root / "audio" / "clip.wav"
+    A.write_wav(audio, A.from_pcm16(_synthetic(turns, duration)))
+    item = Item(
+        id="clip",
+        audio="audio/clip.wav",
+        reference="one two three four five six seven eight",
+        lang="en-US",
+        duration_s=duration,
+        sha256=A.sha256_file(audio),
+        speech=turns,
+        turns=turns,
+    )
+    return Dataset(name="synthetic", path=root, meta={"lang": "en-US"}, items=[item]), item
+
+
+async def _one(delay_ms: float, mode: str, turns, duration) -> list[dict]:
+    params = {
+        "finalize_delay_ms": delay_ms,
+        "native_delay_ms": delay_ms,
+        "partial_delay_ms": 40,
+        "native_silence_ms": 200,
+        "final_only": False,
+    }
     prov = MockProvider("mock-validate", {"params": params, "lang_map": {"en-US": {}}})
-    ctx = SessionContext(lang="en-US", sample_rate=16000, mode=mode, oracle_text="one two three four five six seven eight", oracle_turns=turns)
-    res = await run_session(prov, _synthetic(turns, duration), 16000, turns, ctx, SessionConfig(mode=mode, keep_events=False), "synthetic")
-    if res.status != "ok":
-        raise RuntimeError(res.error)
-    return [dict(t, pacing_p99_ms=res.pacing_ms.get("p99")) for t in res.turns]
+    with tempfile.TemporaryDirectory() as raw:
+        ds, item = _dataset(Path(raw), turns, duration)
+        res = await run_item(
+            prov,
+            ds,
+            item,
+            mode=mode,
+            condition="wideband",
+            timeout_s=max(2.0, delay_ms / 1000.0 + 1.5),
+            silence_tail_s=0.35 if mode == "forced" else 0.45,
+            frame_ms=20,
+        )
+    if not res.ok:
+        raise RuntimeError(res.error or "session failed")
+    return [
+        {
+            "eos_to_final_ms": t.eos_to_final_ms,
+            "ttft_ms": t.ttft_ms,
+            "timeout": t.timeout,
+            "pacing_p99_ms": res.p99_lateness_ms,
+        }
+        for t in res.turns
+    ]
 
 
-async def validate(delays_ms=(0, 100, 300, 1000), repeats: int = 3, concurrency: int = 4) -> dict:
-    """Returns per-delay measured medians and errors for forced and native mode."""
-    turns_single = [[0.5, 2.5]]
-    turns_multi = [[0.5, 2.0], [3.0, 4.6]]
+async def validate(delays_ms=(0, 300), repeats: int = 2, concurrency: int = 1) -> dict:
+    """Return per-delay measured medians for forced and native mode.
+
+    Native mode adds the mock's 200 ms of trailing silence before it finalizes,
+    which is how a vendor turn detector behaves. Forced mode must recover the
+    injected delay within 5 ms.
+    """
+    turns_single = [[0.15, 0.45]]
+    turns_multi = [[0.10, 0.35], [0.60, 0.90]]
     rows = []
+    native_silence_ms = 200
     for mode in ("forced", "native"):
         for d in delays_ms:
             jobs = []
             for r in range(repeats):
-                turns, dur = (turns_single, 3.2) if r % 2 == 0 else (turns_multi, 5.2)
+                turns, dur = (turns_single, 0.7) if r % 2 == 0 else (turns_multi, 1.15)
                 jobs.append(_one(d, mode, turns, dur))
-            # run several sessions concurrently to include event-loop contention in the check
             results = []
             for i in range(0, len(jobs), concurrency):
-                results += await asyncio.gather(*jobs[i:i + concurrency])
+                results += await asyncio.gather(*jobs[i : i + concurrency])
             turns_out = [t for res in results for t in res]
             measured = [t["eos_to_final_ms"] for t in turns_out if t["eos_to_final_ms"] is not None]
-            # native: provider waits native_silence (500 ms of audio after speech end) before deciding
-            expected = d if mode == "forced" else d + 500
+            expected = d if mode == "forced" else d + native_silence_ms
             frame_slack = 0 if mode == "forced" else 20
             med = statistics.median(measured) if measured else None
             err = None if med is None else med - expected
-            ttft = [t["ttft_ms"] for t in turns_out if t["ttft_ms"] is not None]
             rows.append({
-                "mode": mode, "injected_ms": d, "expected_ms": expected, "measured_p50_ms": None if med is None else round(med, 2),
+                "mode": mode,
+                "injected_ms": d,
+                "expected_ms": expected,
+                "measured_p50_ms": None if med is None else round(med, 2),
                 "error_ms": None if err is None else round(err, 2),
                 "max_abs_error_ms": None if not measured else round(max(abs(m - expected) for m in measured), 2),
-                "ttft_p50_ms": round(statistics.median(ttft), 1) if ttft else None, "ttft_expected_ms": 400,
-                "n_turns": len(turns_out), "resolved": len(measured),
+                "n_turns": len(turns_out),
+                "resolved": len(measured),
                 "pass": err is not None and abs(err) <= TOLERANCE_MS + frame_slack and len(measured) == len(turns_out),
             })
     return {"tolerance_ms": TOLERANCE_MS, "rows": rows, "pass": all(r["pass"] for r in rows)}

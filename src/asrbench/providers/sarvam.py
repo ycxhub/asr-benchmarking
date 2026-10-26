@@ -5,6 +5,7 @@ import json
 from urllib.parse import urlencode
 
 from .base import Event, SessionContext, WebSocketProvider, loads
+from .batch import BatchHTTPProvider
 
 
 class SarvamProvider(WebSocketProvider):
@@ -60,3 +61,31 @@ class SarvamProvider(WebSocketProvider):
         if ev == "error":
             return [Event("error", msg.get("message", "sarvam error"), meta=msg)]
         return []
+
+
+# NON-STREAMING. Not registered. Saaras v3 on the Voice Arena board is this file upload
+# (<=30 s). The streaming model is saaras:v3-realtime, registered as `sarvam` above.
+class SarvamRestProvider(BatchHTTPProvider):
+    """NON-STREAMING file upload (saaras:v3). Not registered in configs/providers.yaml."""
+
+    family = "sarvam"
+    sample_rates = (16000,)
+    api_key_env = "SARVAM_API_KEY"
+    hosts = ("api.sarvam.ai",)
+    max_segment_s = 29.5
+
+    async def transcribe(self, wav: bytes, ctx: SessionContext) -> str:
+        lp = self.lang_params(ctx.lang)
+        data = {
+            "model": self.params.get("model", "saaras:v3"),
+            "mode": lp.get("mode", "transcribe"),
+            "language_code": lp.get("language_code", "unknown"),
+        }
+        r = await self._client.post(
+            self.cfg["url"],
+            headers={"api-subscription-key": self.api_key()},
+            data=data,
+            files={"file": ("audio.wav", wav, "audio/wav")},
+        )
+        r.raise_for_status()
+        return r.json().get("transcript") or ""
